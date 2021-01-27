@@ -17,7 +17,7 @@ var rDraw [][]byte //2D Slice of bytes where each new user can append there
 //drawing data through the WS connection
 var oldSlice [][]byte
 var users int
-var ready  = make(chan string, 35) //users use this to tell the mem clean to start
+var ready  = make(chan string, 100) //users use this to tell the mem clean to start
 /*
 var rChan = make(chan struct{}) //for telling when to send updated drawing data
 
@@ -87,7 +87,7 @@ func noMemLeakPls(a *[][]byte){
 			<-ready   //wait for users to be ready for cleanup
 		}
 
-		//for range *a {
+		for range *a {
 
 			if len(*a) > 5 {
 				*a = (*a)[1:]
@@ -95,7 +95,7 @@ func noMemLeakPls(a *[][]byte){
 				log.Println(len(*a))
 			}
 
-	//	}
+		}
 
 		for i := 0; i <= users; i++{
 			ready <- "cleaned"      //tell users we're done
@@ -121,10 +121,13 @@ func update(c *websocket.Conn, rChan chan string){
 			default:
 		}
 
+		ready <- "cleanup"
+		<-ready       //wait for clean to finish
+
 		if test2DSliceEquality(oldSlice, rDraw) == false {
 
 				for i := 0; i < len(rDraw); i++ {
-					if rDraw[i] != nil{
+					if len(rDraw)-1 > i {
 						err := c.WriteMessage(websocket.TextMessage, rDraw[i]) //write message back to browser
 						if err != nil {
 							log.Println("write:", err)
@@ -142,10 +145,6 @@ func update(c *websocket.Conn, rChan chan string){
 
 		}
 
-
-
-		ready <- "cleanup"
-		<-ready       //wait for clean to finish
 	}
 }
 
