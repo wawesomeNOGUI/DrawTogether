@@ -126,7 +126,7 @@ func update(c *websocket.Conn, rChan chan string){
 
 		if test2DSliceEquality(oldSlice, rDraw) == false {
 
-				for i := 0; i < len(rDraw); i++ {
+				for i := 0; i < len(rDraw)-1; i++ {
 					if len(rDraw)-1 > i {
 						err := c.WriteMessage(websocket.TextMessage, rDraw[i]) //write message back to browser
 						if err != nil {
