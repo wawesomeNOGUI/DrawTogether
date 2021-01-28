@@ -1,0 +1,170 @@
+<html>
+<body>
+<script>
+var animate = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || function (callback) {
+        window.setTimeout(callback, 1000/60)
+    };
+var canvas = document.createElement("canvas");
+var width = 700;
+var height = 650;
+canvas.width = width;
+canvas.height = height;
+var ctx = canvas.getContext('2d');
+
+
+var myStyle = "#FF00FF";    //What user color
+
+var myData =
+{
+  "style" : myStyle,
+  "oldX"  : 0,
+  "oldY"  : 0,
+  "newX"  : 0,
+  "newY"  : 0,
+}
+
+//=============Websocket=================================
+//var ws = new WebSocket("ws://localhost:80/echo");
+var ws = new WebSocket("ws://192.168.1.71:80/echo");
+
+ws.onopen = function(evt) {
+    console.log("OPEN");
+    ws.send(JSON.stringify(myData));
+}
+ws.onclose = function(evt) {
+    console.log("CLOSE");
+    ws = null;
+}
+ws.onmessage = function(evt) {
+    //console.log("RESPONSE: " + evt.data);
+    remoteDraw(JSON.parse(evt.data));
+}
+ws.onerror = function(evt) {
+    console.log("ERROR: " + evt.data);
+}
+
+//=======================================================
+
+var keysDown = {};     //This creates var for keysDown event
+
+
+function remoteDraw(data){
+//  console.log(data.style);
+  ctx.beginPath();
+  ctx.lineWidth = "5";
+  ctx.strokeStyle = data.style;
+  ctx.moveTo(data.oldX, data.oldY);        //move turtle
+  ctx.lineTo(data.newX, data.newY);
+  ctx.stroke();
+}
+
+
+var render = function () {
+  ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+};
+
+
+
+var update = function() {
+keyPress();
+
+
+};
+
+
+
+var step = function() {
+update();
+render();
+animate(step);
+};
+
+
+
+var keyPress = function() {
+
+for(var key in keysDown) {
+    var value = Number(key);
+
+   if (value == 37) {   //37 = left
+     playerX = playerX - 4;
+	    //Put stuff for keypress to activate here
+   } else if(value == 39){  //38 = right
+     playerX = playerX + 4;
+   } else if(value == 40){  //40 = down
+     playerY = playerY + 4;
+   } else if(value == 38){  //39 = up
+     playerY = playerY - 4;
+   }
+
+ }
+
+};
+
+
+
+
+document.body.appendChild(canvas);
+animate(step);
+
+var oldX;
+var oldY;
+var mouseDown = false;
+var mouseX;
+var mouseY;
+
+canvas.addEventListener("mousedown", function(event){
+  mouseDown = true;
+  oldX = event.clientX - canvas.offsetLeft;
+  oldY = event.clientY - canvas.offsetTop;
+})
+
+canvas.addEventListener("mouseup", function(event){
+  mouseDown = false;
+
+})
+
+canvas.addEventListener("mousemove", function(event){
+  if(mouseDown == true){
+    mouseX = event.clientX - canvas.offsetLeft;
+    mouseY = event.clientY - canvas.offsetTop;
+
+    //Turtle draw is smoother than fillRect's
+
+    ctx.beginPath();
+    ctx.lineWidth = "5";
+    ctx.strokeStyle = myStyle;
+    ctx.moveTo(oldX, oldY);        //move turtle
+    ctx.lineTo(mouseX, mouseY);
+    ctx.stroke();                 //draw the line
+
+    //Send data to websocket
+    myData.oldX = oldX;
+    myData.oldY = oldY;
+    myData.newX = mouseX;
+    myData.newY = mouseY;
+    ws.send(JSON.stringify(myData));
+
+
+    //set old vars
+    oldX = mouseX;
+    oldY = mouseY;
+
+
+  }
+});
+
+window.addEventListener("keydown", function (event) {
+keysDown[event.keyCode] = true;
+});
+
+
+window.addEventListener("keyup", function (event) {
+    delete keysDown[event.keyCode];
+});
+
+</script>
+
+</body>
+</html>

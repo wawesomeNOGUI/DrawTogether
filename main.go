@@ -17,7 +17,9 @@ var rDraw [][]byte //2D Slice of bytes where each new user can append there
 //drawing data through the WS connection
 var oldSlice [][]byte
 var users int
-var ready  = make(chan string, 100) //users use this to tell the mem clean to start
+var cleaned  = make(chan string, 1) //users use this to tell the mem clean to start
+var clean  = make(chan string)
+//var newUser = make(chan string)
 /*
 var rChan = make(chan struct{}) //for telling when to send updated drawing data
 
@@ -82,24 +84,32 @@ func testSliceEquality(a, b []byte) bool {
 */
 
 func noMemLeakPls(a *[][]byte){
+
 	for{
-		for i := 0; i <= users; i++{
-			<-ready   //wait for users to be ready for cleanup
-		}
 
-		for range *a {
+				//log.Println("yes")
 
-			if len(*a) > 5 {
-				*a = (*a)[1:]
-				//*a = append(*a, slice)     //delete first entry from slice (pop)
-				log.Println(len(*a))
-			}
+					for i := 0; i < users; i++{       //-1 cause first read was in select
+						<-clean   //wait for users to be ready for cleanup
+						log.Println(i)
+					}
 
-		}
 
-		for i := 0; i <= users; i++{
-			ready <- "cleaned"      //tell users we're done
-		}
+				for range *a {
+
+					if len(*a) > 5 {
+						//delete first entry from slice (pop)
+						*a = (*a)[1:]
+						//log.Println(len(*a))
+					}
+
+				}
+
+				for i := 0; i < users; i++{
+					cleaned <- "cleaned"      //tell users we're done
+				}
+
+
 
 
 	}
@@ -111,6 +121,11 @@ func closeWriter(rChan chan string){
 	 rChan <- "close"
 }
 
+func removeUser(){
+	users = users - 1
+	clean <- "cleanup"  //just to make sure the clean function doesn't block
+}
+
 
 func update(c *websocket.Conn, rChan chan string){
 	for {
@@ -118,37 +133,42 @@ func update(c *websocket.Conn, rChan chan string){
 		select{
 			case <-rChan:      //for exiting this function when a user exits
 				return
+				log.Println("exited")
 			default:
-		}
+				clean <- "cleanup"
+				//log.Println("sent")
+				<-cleaned       //wait for clean to finish
 
-		ready <- "cleanup"
-		<-ready       //wait for clean to finish
+				if test2DSliceEquality(oldSlice, rDraw) == false {
 
-		if test2DSliceEquality(oldSlice, rDraw) == false {
+						for i := 0; i < len(rDraw)-1; i++ {
+							if len(rDraw)-1 > i {
+								err := c.WriteMessage(websocket.TextMessage, rDraw[i]) //write message back to browser
+								if err != nil {
+									log.Println("write:", err)
+									break
+								}
+							}
+					  }
 
-				for i := 0; i < len(rDraw)-1; i++ {
-					if len(rDraw)-1 > i {
-						err := c.WriteMessage(websocket.TextMessage, rDraw[i]) //write message back to browser
-						if err != nil {
-							log.Println("write:", err)
-							break
+						//make oldSlice
+						oldSlice = make([][]byte, len(rDraw))
+						for i := range rDraw {
+						    oldSlice[i] = make([]byte, len(rDraw[i]))
+						    copy(oldSlice[i], rDraw[i])
 						}
-					}
-			  }
 
-				//make oldSlice
-				oldSlice = make([][]byte, len(rDraw))
-				for i := range rDraw {
-				    oldSlice[i] = make([]byte, len(rDraw[i]))
-				    copy(oldSlice[i], rDraw[i])
 				}
-
 		}
+
+
 
 	}
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
+	users = users + 1
+
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -159,17 +179,10 @@ func echo(w http.ResponseWriter, r *http.Request) {
 
 	defer c.Close()
 	defer closeWriter(rChan) //tell the websocket writer to close too
+	defer removeUser()
 
-	_, message, err := c.ReadMessage() //ReadMessage blocks until message received
-	if err != nil {
-		log.Println("read:", err)
-	}
 
-	//add this user's data to the slice
-	rDraw = append(rDraw, message)
-	//mySpotInSlice := len(rDraw) - 1
-
-	go update(c, rChan)
+	go update(c, rChan)       //write data back to this user
 
 	for {
 		_, message, err := c.ReadMessage() //ReadMessage blocks until SDP message received
@@ -177,7 +190,12 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			log.Println("read:", err)
 		}
 
-		rDraw = append(rDraw, message) //udate drawing info in slice
+		if string(message[0]) == "{"{
+			rDraw = append(rDraw, message) //udate drawing info in slice
+		}else{
+			log.Println(message)
+		}
+
 		//rChan <- empty
 		//log.Println(message, msgType)
 
@@ -185,17 +203,16 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func home(w http.ResponseWriter, r *http.Request) {
-	//homeTemplate.Execute(w, "ws://"+r.Host+"/echo")
-	http.ServeFile(w, r, "./public/index.html")
-}
 
 func main() {
-
-	http.HandleFunc("/echo", echo) //this request comes from webrtc.html
-	http.HandleFunc("/", home)
-
 	go noMemLeakPls(&rDraw)
+
+	fileServer := http.FileServer(http.Dir("./public"))
+	http.HandleFunc("/echo", echo) //this request comes from webrtc.html
+	http.Handle("/", fileServer)
+
+
+
 
 	log.Fatal(http.ListenAndServe(":80", nil))
 
