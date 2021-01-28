@@ -86,7 +86,7 @@ func testSliceEquality(a, b []byte) bool {
 func noMemLeakPls(a *[][]byte){
 
 	for{
-		if users > 1 {
+		if users > 1 && len(*a) > 5{
 
 				for i := 0; i < users; i++{       //-1 cause first read was in select
 					<-clean   //wait for users to be ready for cleanup
@@ -123,7 +123,7 @@ func closeWriter(rChan chan string){
 
 func removeUser(){
 	users = users - 1
-	clean <- "cleanup"  //just to make sure the clean function doesn't block
+	//clean <- "cleanup"  //just to make sure the clean function doesn't block
 }
 
 
