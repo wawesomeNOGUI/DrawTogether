@@ -17,7 +17,7 @@ var rDraw [][]byte //2D Slice of bytes where each new user can append there
 //drawing data through the WS connection
 var oldSlice [][]byte
 var users int
-var cleaned  = make(chan string, 1) //users use this to tell the mem clean to start
+var cleaned  = make(chan string) //users use this to tell the mem clean to start
 var clean  = make(chan string)
 //var newUser = make(chan string)
 /*
@@ -86,13 +86,12 @@ func testSliceEquality(a, b []byte) bool {
 func noMemLeakPls(a *[][]byte){
 
 	for{
+		if users > 1 {
 
-				//log.Println("yes")
-
-					for i := 0; i < users; i++{       //-1 cause first read was in select
-						<-clean   //wait for users to be ready for cleanup
-						log.Println(i)
-					}
+				for i := 0; i < users; i++{       //-1 cause first read was in select
+					<-clean   //wait for users to be ready for cleanup
+					log.Println(i)
+				}
 
 
 				for range *a {
@@ -108,13 +107,14 @@ func noMemLeakPls(a *[][]byte){
 				for i := 0; i < users; i++{
 					cleaned <- "cleaned"      //tell users we're done
 				}
-
+		}
+	}
 
 
 
 	}
 
-}
+
 
 
 func closeWriter(rChan chan string){
